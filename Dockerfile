@@ -1,10 +1,17 @@
-FROM python:3.13.0-slim
+ARG PYTHON_VERSION=3.13.0
+FROM python:${PYTHON_VERSION}-slim
 
 WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python3", "main.py"] 
+CMD ["python", "main.py"] 
