@@ -28,7 +28,7 @@ def run_health_check_server():
     with socketserver.TCPServer(("", 8000), HealthCheckHandler) as httpd:
         httpd.serve_forever()
 
-async def setup_admin_bot():
+def setup_admin_bot():
     """Setup the admin bot"""
     try:
         logger.info("Starting Admin Bot...")
@@ -56,7 +56,7 @@ async def setup_admin_bot():
         logger.error(f"Error in Admin Bot setup: {str(e)}", exc_info=True)
         raise
 
-async def setup_student_bot():
+def setup_student_bot():
     """Setup the student search bot"""
     try:
         logger.info("Starting Student Search Bot...")
@@ -90,21 +90,13 @@ async def setup_student_bot():
         logger.error(f"Error in Student Bot setup: {str(e)}", exc_info=True)
         raise
 
-async def run_bots():
-    """Run both bots concurrently"""
-    try:
-        # Setup both bots
-        admin_app = await setup_admin_bot()
-        student_app = await setup_student_bot()
-
-        # Start both bots
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(admin_app.run_polling(allowed_updates=admin_bot.Update.ALL_TYPES))
-            tg.create_task(student_app.run_polling(allowed_updates=telegram_bot.Update.ALL_TYPES))
-
-    except Exception as e:
-        logger.error(f"Error running bots: {str(e)}", exc_info=True)
-        raise
+async def run_application(app):
+    """Run a single application"""
+    async with app:
+        await app.initialize()
+        await app.start()
+        await app.run_polling(allowed_updates=Update.ALL_TYPES)
+        await app.stop()
 
 def main():
     logger.info("Starting both bots...")
@@ -113,14 +105,29 @@ def main():
     health_thread = Thread(target=run_health_check_server, daemon=True)
     health_thread.start()
     
-    # Run both bots
     try:
-        asyncio.run(run_bots())
+        # Setup both bots
+        admin_app = setup_admin_bot()
+        student_app = setup_student_bot()
+        
+        # Create event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Run both bots
+        loop.run_until_complete(
+            asyncio.gather(
+                run_application(admin_app),
+                run_application(student_app)
+            )
+        )
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt. Shutting down...")
     except Exception as e:
         logger.error(f"Fatal error: {str(e)}", exc_info=True)
         sys.exit(1)
+    finally:
+        loop.close()
 
 if __name__ == '__main__':
     main() 
