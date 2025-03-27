@@ -1,0 +1,25 @@
+name: pddikti-api
+services:
+  - name: pddikti-api
+    github:
+      repository: Nant361/sekkkrkeeetbot.py
+      branch: main
+    instance_type: nano
+    ports:
+      - port: 8080
+        protocol: http
+    env:
+      - name: PYTHONUNBUFFERED
+        value: "1"
+      - name: TELEGRAM_BOT_TOKEN
+        secret: true
+      - name: ADMIN_BOT_TOKEN
+        secret: true
+    builder:
+      name: docker
+      dockerfile_path: Dockerfile
+      build_args:
+        - name: PYTHON_VERSION
+          value: "3.13.0"
+      registry:
+        name: koyeb 
