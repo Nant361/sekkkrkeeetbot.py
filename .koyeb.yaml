@@ -2,12 +2,16 @@ name: pddikti-api
 services:
   - name: pddikti-api
     github:
-      repository: Nant361/sekkkrkeeetbot.py
+      repository: YOUR_GITHUB_USERNAME/YOUR_REPOSITORY_NAME
       branch: main
     instance_type: nano
     ports:
-      - port: 8080
+      - port: 8000
         protocol: http
+    healthcheck:
+      http:
+        path: /
+        port: 8000
     env:
       - name: PYTHONUNBUFFERED
         value: "1"
@@ -20,6 +24,6 @@ services:
       dockerfile_path: Dockerfile
       build_args:
         - name: PYTHON_VERSION
-          value: "3.13.0"
+          value: "3.11"
       registry:
         name: koyeb 
