@@ -8,6 +8,8 @@ import sys
 import http.server
 import socketserver
 from threading import Thread
+import asyncio
+from telegram.error import Conflict
 
 # Setup logging
 logging.basicConfig(
@@ -27,7 +29,7 @@ def run_health_check_server():
     with socketserver.TCPServer(("", 8000), HealthCheckHandler) as httpd:
         httpd.serve_forever()
 
-def run_admin_bot():
+async def run_admin_bot():
     """Run the admin bot"""
     try:
         logger.info("Starting Admin Bot...")
@@ -49,13 +51,17 @@ def run_admin_bot():
             application.add_handler(handler)
 
         logger.info("Admin Bot is ready!")
-        application.run_polling(allowed_updates=admin_bot.Update.ALL_TYPES)
+        await application.initialize()
+        await application.start()
+        await application.run_polling(allowed_updates=admin_bot.Update.ALL_TYPES)
             
+    except Conflict:
+        logger.warning("Admin bot instance already running, skipping...")
     except Exception as e:
         logger.error(f"Error in Admin Bot: {str(e)}", exc_info=True)
-        sys.exit(1)
+        raise
 
-def run_student_bot():
+async def run_student_bot():
     """Run the student search bot"""
     try:
         logger.info("Starting Student Search Bot...")
@@ -83,39 +89,42 @@ def run_student_bot():
             application.add_handler(handler)
 
         logger.info("Student Search Bot is ready!")
-        application.run_polling(allowed_updates=telegram_bot.Update.ALL_TYPES)
+        await application.initialize()
+        await application.start()
+        await application.run_polling(allowed_updates=telegram_bot.Update.ALL_TYPES)
             
+    except Conflict:
+        logger.warning("Student bot instance already running, skipping...")
     except Exception as e:
         logger.error(f"Error in Student Search Bot: {str(e)}", exc_info=True)
-        sys.exit(1)
+        raise
+
+async def run_bots():
+    """Run both bots concurrently"""
+    try:
+        await asyncio.gather(
+            run_admin_bot(),
+            run_student_bot()
+        )
+    except Exception as e:
+        logger.error(f"Error running bots: {str(e)}", exc_info=True)
+        raise
 
 def main():
-    logging.info("Starting both bots...")
+    logger.info("Starting both bots...")
     
     # Start health check server
     health_thread = Thread(target=run_health_check_server, daemon=True)
     health_thread.start()
     
-    # Start bot processes
-    admin_process = multiprocessing.Process(target=run_admin_bot)
-    student_process = multiprocessing.Process(target=run_student_bot)
-    
-    admin_process.start()
-    student_process.start()
-    
-    def signal_handler(signum, frame):
-        logging.info("Received termination signal. Shutting down bots...")
-        admin_process.terminate()
-        student_process.terminate()
-        admin_process.join()
-        student_process.join()
-        sys.exit(0)
-    
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-    
-    admin_process.join()
-    student_process.join()
+    # Run both bots
+    try:
+        asyncio.run(run_bots())
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt. Shutting down...")
+    except Exception as e:
+        logger.error(f"Fatal error: {str(e)}", exc_info=True)
+        sys.exit(1)
 
 if __name__ == '__main__':
     main() 
