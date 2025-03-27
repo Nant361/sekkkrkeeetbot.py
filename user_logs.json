@@ -1,0 +1,23 @@
+[
+    {
+        "timestamp": "2025-03-27 06:27:15",
+        "user_id": 5705926766,
+        "username": "nanta361",
+        "action": "remove_user",
+        "details": "Removed user ID: 7982942313"
+    },
+    {
+        "timestamp": "2025-03-27 07:38:29",
+        "user_id": 5705926766,
+        "username": "nanta361",
+        "action": "add_user",
+        "details": "Added user ID: 7982942313"
+    },
+    {
+        "timestamp": "2025-03-27 07:47:31",
+        "user_id": 5705926766,
+        "username": "nanta361",
+        "action": "remove_user",
+        "details": "Removed user ID: 7982942313"
+    }
+]
