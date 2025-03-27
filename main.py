@@ -1,136 +1,100 @@
+import asyncio
 import logging
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler
-from telegram import Update
-import admin_bot
-import telegram_bot
-import signal
-import sys
+import multiprocessing
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+import json
+import os
+from pddikti_api import login_pddikti, search_student, get_student_detail
+import aiohttp
 import http.server
 import socketserver
-from threading import Thread
-import multiprocessing
-from telegram.error import Conflict
+import signal
+import sys
 
-# Setup logging
+# Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Health check server
-class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b'OK')
+# Bot tokens
+ADMIN_BOT_TOKEN = os.getenv('ADMIN_BOT_TOKEN')
+STUDENT_BOT_TOKEN = os.getenv('STUDENT_BOT_TOKEN')
 
+# Health check server
 def run_health_check_server():
-    with socketserver.TCPServer(("", 8000), HealthCheckHandler) as httpd:
+    """Run a simple HTTP server for health checks"""
+    handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", 8000), handler) as httpd:
+        print("Health check server running on port 8000")
         httpd.serve_forever()
 
 def setup_admin_bot():
-    """Setup the admin bot"""
-    try:
-        logger.info("Starting Admin Bot...")
-        application = Application.builder().token(admin_bot.ADMIN_TOKEN).build()
-
-        # Add handlers
-        handlers = [
-            CommandHandler("start", admin_bot.start),
-            CommandHandler("list", admin_bot.list_users),
-            CommandHandler("add", admin_bot.add_user),
-            CommandHandler("remove", admin_bot.remove_user),
-            CommandHandler("logs", admin_bot.view_logs),
-            CommandHandler("getid", admin_bot.get_user_id),
-            CommandHandler("chatid", admin_bot.get_chat_id),
-            MessageHandler(admin_bot.filters.FORWARDED, admin_bot.get_user_id)
-        ]
-        
-        for handler in handlers:
-            application.add_handler(handler)
-
-        logger.info("Admin Bot is ready!")
-        return application
-            
-    except Exception as e:
-        logger.error(f"Error in Admin Bot setup: {str(e)}", exc_info=True)
-        raise
+    """Setup admin bot application"""
+    admin_app = Application.builder().token(ADMIN_BOT_TOKEN).build()
+    
+    # Add handlers
+    admin_app.add_handler(CommandHandler("start", start))
+    admin_app.add_handler(CommandHandler("cari", search))
+    admin_app.add_handler(CommandHandler("adduser", add_user))
+    admin_app.add_handler(CommandHandler("removeuser", remove_user))
+    admin_app.add_handler(CommandHandler("listusers", list_users))
+    admin_app.add_handler(CallbackQueryHandler(handle_callback))
+    
+    return admin_app
 
 def setup_student_bot():
-    """Setup the student search bot"""
-    try:
-        logger.info("Starting Student Search Bot...")
-        application = Application.builder().token(telegram_bot.TOKEN).build()
-
-        # Add handlers
-        handlers = [
-            CommandHandler("start", telegram_bot.start),
-            CommandHandler("cari", telegram_bot.search),
-            CommandHandler("regist", telegram_bot.register_user),
-            CallbackQueryHandler(telegram_bot.button_callback),
-            MessageHandler(telegram_bot.filters.TEXT & ~telegram_bot.filters.COMMAND, telegram_bot.handle_message),
-            MessageHandler(telegram_bot.filters.PHOTO, telegram_bot.handle_message),
-            MessageHandler(telegram_bot.filters.Document.ALL, telegram_bot.handle_message),
-            MessageHandler(telegram_bot.filters.VOICE, telegram_bot.handle_message),
-            MessageHandler(telegram_bot.filters.VIDEO, telegram_bot.handle_message),
-            MessageHandler(telegram_bot.filters.Sticker.ALL, telegram_bot.handle_message),
-            MessageHandler(telegram_bot.filters.LOCATION, telegram_bot.handle_message),
-            MessageHandler(telegram_bot.filters.CONTACT, telegram_bot.handle_message),
-            MessageHandler(telegram_bot.filters.ANIMATION, telegram_bot.handle_message),
-            MessageHandler(telegram_bot.filters.AUDIO, telegram_bot.handle_message)
-        ]
-        
-        for handler in handlers:
-            application.add_handler(handler)
-
-        logger.info("Student Search Bot is ready!")
-        return application
-            
-    except Exception as e:
-        logger.error(f"Error in Student Bot setup: {str(e)}", exc_info=True)
-        raise
+    """Setup student bot application"""
+    student_app = Application.builder().token(STUDENT_BOT_TOKEN).build()
+    
+    # Add handlers
+    student_app.add_handler(CommandHandler("start", start))
+    student_app.add_handler(CommandHandler("cari", search))
+    student_app.add_handler(CallbackQueryHandler(handle_callback))
+    
+    return student_app
 
 def run_admin_bot():
     """Run admin bot in a separate process"""
-    app = setup_admin_bot()
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    admin_app = setup_admin_bot()
+    print("Starting Admin Bot...")
+    admin_app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 def run_student_bot():
     """Run student bot in a separate process"""
-    app = setup_student_bot()
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    student_app = setup_student_bot()
+    print("Starting Student Bot...")
+    student_app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 def main():
-    logger.info("Starting both bots...")
+    """Main function to run both bots"""
+    # Start health check server in a separate process
+    health_check_process = multiprocessing.Process(target=run_health_check_server)
+    health_check_process.start()
     
-    # Start health check server
-    health_thread = Thread(target=run_health_check_server, daemon=True)
-    health_thread.start()
+    # Start admin bot in a separate process
+    admin_process = multiprocessing.Process(target=run_admin_bot)
+    admin_process.start()
+    
+    # Start student bot in a separate process
+    student_process = multiprocessing.Process(target=run_student_bot)
+    student_process.start()
     
     try:
-        # Start both bots in separate processes
-        admin_process = multiprocessing.Process(target=run_admin_bot)
-        student_process = multiprocessing.Process(target=run_student_bot)
-        
-        admin_process.start()
-        student_process.start()
-        
-        # Wait for processes to complete
+        # Wait for all processes to complete
         admin_process.join()
         student_process.join()
-        
+        health_check_process.join()
     except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt. Shutting down...")
+        print("\nShutting down...")
+        # Terminate all processes
         admin_process.terminate()
         student_process.terminate()
-    except Exception as e:
-        logger.error(f"Fatal error: {str(e)}", exc_info=True)
-        if 'admin_process' in locals():
-            admin_process.terminate()
-        if 'student_process' in locals():
-            student_process.terminate()
-        sys.exit(1)
+        health_check_process.terminate()
+        sys.exit(0)
 
 if __name__ == '__main__':
     main() 
