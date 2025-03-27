@@ -5,6 +5,9 @@ import admin_bot
 import telegram_bot
 import signal
 import sys
+import http.server
+import socketserver
+from threading import Thread
 
 # Setup logging
 logging.basicConfig(
@@ -12,6 +15,17 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Health check server
+class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'OK')
+
+def run_health_check_server():
+    with socketserver.TCPServer(("", 8000), HealthCheckHandler) as httpd:
+        httpd.serve_forever()
 
 def run_admin_bot():
     """Run the admin bot"""
@@ -75,43 +89,33 @@ def run_student_bot():
         logger.error(f"Error in Student Search Bot: {str(e)}", exc_info=True)
         sys.exit(1)
 
-def signal_handler(signum, frame):
-    """Handle termination signals"""
-    logger.info("Received termination signal. Shutting down bots...")
-    sys.exit(0)
-
 def main():
-    """Run both bots concurrently"""
-    try:
-        # Register signal handlers
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-        
-        logger.info("Starting both bots...")
-        
-        # Create processes for each bot
-        admin_process = multiprocessing.Process(target=run_admin_bot, name="AdminBot")
-        student_process = multiprocessing.Process(target=run_student_bot, name="StudentBot")
-        
-        # Start both processes
-        admin_process.start()
-        student_process.start()
-        
-        # Wait for both processes to complete
-        admin_process.join()
-        student_process.join()
-        
-    except KeyboardInterrupt:
-        logger.info("\nBots stopped by user")
+    logging.info("Starting both bots...")
+    
+    # Start health check server
+    health_thread = Thread(target=run_health_check_server, daemon=True)
+    health_thread.start()
+    
+    # Start bot processes
+    admin_process = multiprocessing.Process(target=run_admin_bot)
+    student_process = multiprocessing.Process(target=run_student_bot)
+    
+    admin_process.start()
+    student_process.start()
+    
+    def signal_handler(signum, frame):
+        logging.info("Received termination signal. Shutting down bots...")
         admin_process.terminate()
         student_process.terminate()
-    except Exception as e:
-        logger.error(f"Error in main process: {str(e)}", exc_info=True)
-        if 'admin_process' in locals():
-            admin_process.terminate()
-        if 'student_process' in locals():
-            student_process.terminate()
-        sys.exit(1)
+        admin_process.join()
+        student_process.join()
+        sys.exit(0)
+    
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    admin_process.join()
+    student_process.join()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main() 
