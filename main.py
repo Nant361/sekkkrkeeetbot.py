@@ -1,4 +1,3 @@
-import multiprocessing
 import logging
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler
 import admin_bot
@@ -29,8 +28,8 @@ def run_health_check_server():
     with socketserver.TCPServer(("", 8000), HealthCheckHandler) as httpd:
         httpd.serve_forever()
 
-async def run_admin_bot():
-    """Run the admin bot"""
+async def setup_admin_bot():
+    """Setup the admin bot"""
     try:
         logger.info("Starting Admin Bot...")
         application = Application.builder().token(admin_bot.ADMIN_TOKEN).build()
@@ -51,18 +50,14 @@ async def run_admin_bot():
             application.add_handler(handler)
 
         logger.info("Admin Bot is ready!")
-        await application.initialize()
-        await application.start()
-        await application.run_polling(allowed_updates=admin_bot.Update.ALL_TYPES)
+        return application
             
-    except Conflict:
-        logger.warning("Admin bot instance already running, skipping...")
     except Exception as e:
-        logger.error(f"Error in Admin Bot: {str(e)}", exc_info=True)
+        logger.error(f"Error in Admin Bot setup: {str(e)}", exc_info=True)
         raise
 
-async def run_student_bot():
-    """Run the student search bot"""
+async def setup_student_bot():
+    """Setup the student search bot"""
     try:
         logger.info("Starting Student Search Bot...")
         application = Application.builder().token(telegram_bot.TOKEN).build()
@@ -89,23 +84,24 @@ async def run_student_bot():
             application.add_handler(handler)
 
         logger.info("Student Search Bot is ready!")
-        await application.initialize()
-        await application.start()
-        await application.run_polling(allowed_updates=telegram_bot.Update.ALL_TYPES)
+        return application
             
-    except Conflict:
-        logger.warning("Student bot instance already running, skipping...")
     except Exception as e:
-        logger.error(f"Error in Student Search Bot: {str(e)}", exc_info=True)
+        logger.error(f"Error in Student Bot setup: {str(e)}", exc_info=True)
         raise
 
 async def run_bots():
     """Run both bots concurrently"""
     try:
-        await asyncio.gather(
-            run_admin_bot(),
-            run_student_bot()
-        )
+        # Setup both bots
+        admin_app = await setup_admin_bot()
+        student_app = await setup_student_bot()
+
+        # Start both bots
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(admin_app.run_polling(allowed_updates=admin_bot.Update.ALL_TYPES))
+            tg.create_task(student_app.run_polling(allowed_updates=telegram_bot.Update.ALL_TYPES))
+
     except Exception as e:
         logger.error(f"Error running bots: {str(e)}", exc_info=True)
         raise
