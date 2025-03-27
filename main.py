@@ -8,7 +8,7 @@ import sys
 import http.server
 import socketserver
 from threading import Thread
-import asyncio
+import multiprocessing
 from telegram.error import Conflict
 
 # Setup logging
@@ -91,24 +91,15 @@ def setup_student_bot():
         logger.error(f"Error in Student Bot setup: {str(e)}", exc_info=True)
         raise
 
-async def run_bot(app):
-    """Run a single bot application"""
-    try:
-        await app.initialize()
-        await app.start()
-        await app.run_polling(allowed_updates=Update.ALL_TYPES)
-    finally:
-        await app.stop()
+def run_admin_bot():
+    """Run admin bot in a separate process"""
+    app = setup_admin_bot()
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
-async def run_bots():
-    """Run both bots concurrently"""
-    admin_app = setup_admin_bot()
-    student_app = setup_student_bot()
-    
-    await asyncio.gather(
-        run_bot(admin_app),
-        run_bot(student_app)
-    )
+def run_student_bot():
+    """Run student bot in a separate process"""
+    app = setup_student_bot()
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 def main():
     logger.info("Starting both bots...")
@@ -118,11 +109,27 @@ def main():
     health_thread.start()
     
     try:
-        asyncio.run(run_bots())
+        # Start both bots in separate processes
+        admin_process = multiprocessing.Process(target=run_admin_bot)
+        student_process = multiprocessing.Process(target=run_student_bot)
+        
+        admin_process.start()
+        student_process.start()
+        
+        # Wait for processes to complete
+        admin_process.join()
+        student_process.join()
+        
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt. Shutting down...")
+        admin_process.terminate()
+        student_process.terminate()
     except Exception as e:
         logger.error(f"Fatal error: {str(e)}", exc_info=True)
+        if 'admin_process' in locals():
+            admin_process.terminate()
+        if 'student_process' in locals():
+            student_process.terminate()
         sys.exit(1)
 
 if __name__ == '__main__':
