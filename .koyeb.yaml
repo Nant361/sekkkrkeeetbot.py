@@ -5,6 +5,9 @@ services:
       repository: Nant361/sekkkrkeeetbot.py
       branch: main
     instance_type: nano
+    scalability:
+      min_instances: 1
+      max_instances: 1
     ports:
       - port: 8000
         protocol: http
