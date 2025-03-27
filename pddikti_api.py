@@ -84,16 +84,31 @@ async def search_student(keyword, i_iduser, pm_token, session):
         
         search_url = f"https://api-pddikti-admin.kemdikbud.go.id/mahasiswa/result?limit=20&page=0&id_pengguna={i_iduser}&id_role=3&pm={pm_token}"
         
+        print(f"\n=== Search Request ===")
+        print(f"Keyword: {keyword}")
+        print(f"URL: {search_url}")
+        print(f"Data: {json.dumps(search_data, indent=2)}")
+        
         async with session.post(search_url, data=search_data, headers={"User-Agent": "Mozilla/5.0"}) as response:
+            print(f"\n=== Search Response ===")
+            print(f"Status: {response.status}")
+            
             if response.status == 200:
                 data = await response.json()
-                return data.get("result", {}).get("data", [])
+                print(f"Response data: {json.dumps(data, indent=2)}")
+                result = data.get("result", {}).get("data", [])
+                print(f"Found {len(result)} results")
+                return result
             else:
+                response_text = await response.text()
+                print(f"Response text: {response_text}")
                 print(f"Search failed with status {response.status}")
                 return []
                 
     except Exception as e:
         print(f"Error during search: {str(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         return []
 
 async def get_student_detail(id_reg_pd, i_iduser, id_organisasi, pm_token, session):
