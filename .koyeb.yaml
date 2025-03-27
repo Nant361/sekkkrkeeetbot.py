@@ -2,7 +2,7 @@ name: pddikti-api
 services:
   - name: pddikti-api
     github:
-      repository: YOUR_GITHUB_USERNAME/YOUR_REPOSITORY_NAME
+      repository: Nant361/sekkkrkeeetbot.py
       branch: main
     instance_type: nano
     ports:
