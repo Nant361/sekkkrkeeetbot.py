@@ -1,5 +1,6 @@
 import logging
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler
+from telegram import Update
 import admin_bot
 import telegram_bot
 import signal
@@ -90,13 +91,24 @@ def setup_student_bot():
         logger.error(f"Error in Student Bot setup: {str(e)}", exc_info=True)
         raise
 
-async def run_application(app):
-    """Run a single application"""
-    async with app:
+async def run_bot(app):
+    """Run a single bot application"""
+    try:
         await app.initialize()
         await app.start()
         await app.run_polling(allowed_updates=Update.ALL_TYPES)
+    finally:
         await app.stop()
+
+async def run_bots():
+    """Run both bots concurrently"""
+    admin_app = setup_admin_bot()
+    student_app = setup_student_bot()
+    
+    await asyncio.gather(
+        run_bot(admin_app),
+        run_bot(student_app)
+    )
 
 def main():
     logger.info("Starting both bots...")
@@ -106,28 +118,12 @@ def main():
     health_thread.start()
     
     try:
-        # Setup both bots
-        admin_app = setup_admin_bot()
-        student_app = setup_student_bot()
-        
-        # Create event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        # Run both bots
-        loop.run_until_complete(
-            asyncio.gather(
-                run_application(admin_app),
-                run_application(student_app)
-            )
-        )
+        asyncio.run(run_bots())
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt. Shutting down...")
     except Exception as e:
         logger.error(f"Fatal error: {str(e)}", exc_info=True)
         sys.exit(1)
-    finally:
-        loop.close()
 
 if __name__ == '__main__':
     main() 
